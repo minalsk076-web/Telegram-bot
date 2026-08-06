@@ -1,6 +1,6 @@
 import os
 import gc
-import fitz
+from pypdf import PdfReader, PdfWriter
 from telegram import Update, constants
 from telegram.ext import (
     ApplicationBuilder,
@@ -29,40 +29,43 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
     file = await context.bot.get_file(document.file_id)
     input_path = f"input_{user_id}.pdf"
     
-    # Download file in chunks to prevent memory spike
     await file.download_to_drive(input_path)
 
     try:
-        # Open PDF in low-memory mode
-        doc = fitz.open(input_path)
+        reader = PdfReader(input_path)
+        total_pages = len(reader.pages)
         
         if isinstance(action, tuple) and action[0] == "split":
             chunk_size = action[1]
-            total_pages = len(doc)
             for i in range(0, total_pages, chunk_size):
-                new_doc = fitz.open()
-                new_doc.insert_pdf(doc, from_page=i, to_page=min(i + chunk_size - 1, total_pages - 1))
-                out = f"part_{i+1}.pdf"
-                new_doc.save(out, garbage=4, deflate=True)
-                new_doc.close()
+                writer = PdfWriter()
+                for page_num in range(i, min(i + chunk_size, total_pages)):
+                    writer.add_page(reader.pages[page_num])
+                
+                out = f"part_{i//chunk_size + 1}.pdf"
+                with open(out, 'wb') as output_file:
+                    writer.write(output_file)
                 
                 with open(out, 'rb') as f:
                     await update.message.reply_document(document=f)
                 os.remove(out)
-                gc.collect() # Free up RAM immediately
+                gc.collect()
 
         elif isinstance(action, tuple) and action[0] == "remove":
-            pages_to_del = sorted([int(p)-1 for p in action[1].split(',') if int(p) <= len(doc)], reverse=True)
-            for p in pages_to_del: 
-                doc.delete_page(p)
+            pages_to_del = {int(p)-1 for p in action[1].split(',') if int(p) <= total_pages}
+            writer = PdfWriter()
+            for index, page in enumerate(reader.pages):
+                if index not in pages_to_del:
+                    writer.add_page(page)
+            
             out = f"modified_{user_id}.pdf"
-            doc.save(out, garbage=4, deflate=True)
+            with open(out, 'wb') as output_file:
+                writer.write(output_file)
             
             with open(out, 'rb') as f:
                 await update.message.reply_document(document=f)
             os.remove(out)
 
-        doc.close()
         gc.collect()
 
     except Exception as e:
@@ -82,4 +85,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-# fix
