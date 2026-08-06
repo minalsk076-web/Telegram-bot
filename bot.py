@@ -1,5 +1,7 @@
 import os
 import asyncio
+from PIL import Image, ImageOps
+from pdf2image import convert_from_path
 import img2pdf
 from pypdf import PdfReader, PdfWriter
 from telegram import Update, constants
@@ -25,7 +27,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "2. /rmv_pg\n"
         "3. /img_pdf\n"
         "4. /invert_pdf\n\n"
-        "*(Note: Kisi bhi chal rahe process ko rokne ke liye kabhi bhi /cancel dabayein)*"
+        "*(Kisi bhi process ko beech mein rokne ke liye /cancel bhejein)*"
     )
     return ConversationHandler.END
 
@@ -153,7 +155,7 @@ async def process_pdf_remove(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     return ConversationHandler.END
 
-# ----------------- 3. IMAGE TO PDF (Album Supported) -----------------
+# ----------------- 3. IMAGE TO PDF (Album Spam Fixed) -----------------
 async def cmd_img_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['photos'] = []
     await update.message.reply_text("Send me photo (Ya cancel karne ke liye /cancel bhejein)")
@@ -168,8 +170,10 @@ async def receive_photos(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await photo_file.download_to_drive(path)
     context.user_data['photos'].append(path)
 
-    await asyncio.sleep(1.5)
-    
+    # Agar yeh photo kisi album (media_group_id) ka part hai, toh baar-baar message mat bhejo
+    if update.message.media_group_id:
+        return WAITING_PHOTOS
+
     photos = context.user_data['photos']
     msg = (
         f"Total number of received photo:- {len(photos)}\n\n"
@@ -217,7 +221,7 @@ async def process_img_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     return ConversationHandler.END
 
-# ----------------- 4. INVERT PDF -----------------
+# ----------------- 4. INVERT PDF (Color Inversion Fixed) -----------------
 async def cmd_invert_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['action'] = 'invert'
     await update.message.reply_text("Please send your pdf (Ya cancel karne ke liye /cancel bhejein)")
@@ -230,24 +234,28 @@ async def process_invert_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE)
     input_path = f"invert_{user_id}.pdf"
     await file.download_to_drive(input_path)
 
-    proc_msg = await update.message.reply_text("Your pdf is processing please wait.. ⏳")
+    proc_msg = await update.message.reply_text("PDF colors are inverting, please wait.. ⏳")
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action=constants.ChatAction.UPLOAD_DOCUMENT)
 
     out_pdf = f"inverted_{doc.file_name}"
+    inverted_paths = []
 
     try:
-        reader = PdfReader(input_path)
-        writer = PdfWriter()
-        for page in reader.pages:
-            writer.add_page(page)
+        # PDF pages ko images me convert karke invert karenge
+        images = convert_from_path(input_path)
+        for i, img in enumerate(images):
+            inv_img = ImageOps.invert(img.convert("RGB"))
+            p = f"inv_{user_id}_{i}.jpg"
+            inv_img.save(p, "JPEG")
+            inverted_paths.append(p)
 
         with open(out_pdf, "wb") as f:
-            writer.write(f)
+            f.write(img2pdf.convert(inverted_paths))
 
         with open(out_pdf, "rb") as f:
             await update.message.reply_document(
                 document=f,
-                caption="Your pdf is successfully inverted"
+                caption="Your pdf colors are successfully inverted! ✅"
             )
 
         await proc_msg.delete()
@@ -257,6 +265,9 @@ async def process_invert_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE)
     finally:
         if os.path.exists(input_path):
             os.remove(input_path)
+        for p in inverted_paths:
+            if os.path.exists(p):
+                os.remove(p)
         if os.path.exists(out_pdf):
             os.remove(out_pdf)
         context.user_data.clear()
@@ -265,9 +276,8 @@ async def process_invert_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 # ----------------- CANCEL COMMAND -----------------
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Agar pehle se koi files ya data saved hai toh saaf kar do
     context.user_data.clear()
-    await update.message.reply_text("❌ Process cancelled successfully. Ab aap koi bhi doosri command use kar sakte hain!")
+    await update.message.reply_text("❌ Process cancelled successfully. Ab aap doosri command use kar sakte hain!")
     return ConversationHandler.END
 
 def main():
