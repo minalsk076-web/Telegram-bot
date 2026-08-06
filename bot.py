@@ -1,5 +1,6 @@
 import os
 import gc
+import asyncio
 from pypdf import PdfReader, PdfWriter
 from telegram import Update, constants
 from telegram.ext import (
@@ -97,6 +98,14 @@ def main():
     app.add_handler(CommandHandler("invert_pdf", lambda u, c: u.message.reply_text("Invert PDF feature is ready.")))
     
     app.add_handler(MessageHandler(filters.Document.PDF, handle_document))
+    
+    # Modern event loop handling for Python 3.14 compatibility
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
     app.run_polling()
 
 if __name__ == "__main__":
