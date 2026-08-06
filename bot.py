@@ -24,14 +24,15 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "1. /pdf_dvd\n"
         "2. /rmv_pg\n"
         "3. /img_pdf\n"
-        "4. /invert_pdf"
+        "4. /invert_pdf\n\n"
+        "*(Note: Kisi bhi chal rahe process ko rokne ke liye kabhi bhi /cancel dabayein)*"
     )
     return ConversationHandler.END
 
 # ----------------- 1. DIVIDE PDF -----------------
 async def cmd_pdf_dvd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['action'] = 'split'
-    await update.message.reply_text("Send your pdf")
+    await update.message.reply_text("Send your pdf (Ya cancel karne ke liye /cancel bhejein)")
     return WAITING_PDF
 
 async def receive_pdf_for_split(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -88,7 +89,7 @@ async def process_pdf_split(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ----------------- 2. REMOVE PAGES -----------------
 async def cmd_rmv_pg(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['action'] = 'remove'
-    await update.message.reply_text("Send your pdf file")
+    await update.message.reply_text("Send your pdf file (Ya cancel karne ke liye /cancel bhejein)")
     return WAITING_PDF
 
 async def receive_pdf_for_remove(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -155,7 +156,7 @@ async def process_pdf_remove(update: Update, context: ContextTypes.DEFAULT_TYPE)
 # ----------------- 3. IMAGE TO PDF (Album Supported) -----------------
 async def cmd_img_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['photos'] = []
-    await update.message.reply_text("Send me photo")
+    await update.message.reply_text("Send me photo (Ya cancel karne ke liye /cancel bhejein)")
     return WAITING_PHOTOS
 
 async def receive_photos(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -167,7 +168,6 @@ async def receive_photos(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await photo_file.download_to_drive(path)
     context.user_data['photos'].append(path)
 
-    # Thoda wait taaki album ki saari photos ek saath group ho jayein aur baar-baar spam na ho
     await asyncio.sleep(1.5)
     
     photos = context.user_data['photos']
@@ -220,7 +220,7 @@ async def process_img_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ----------------- 4. INVERT PDF -----------------
 async def cmd_invert_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['action'] = 'invert'
-    await update.message.reply_text("Please send your pdf")
+    await update.message.reply_text("Please send your pdf (Ya cancel karne ke liye /cancel bhejein)")
     return WAITING_PDF
 
 async def process_invert_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -263,10 +263,11 @@ async def process_invert_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     return ConversationHandler.END
 
-# ----------------- CANCEL -----------------
+# ----------------- CANCEL COMMAND -----------------
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Agar pehle se koi files ya data saved hai toh saaf kar do
     context.user_data.clear()
-    await update.message.reply_text("Cancelled.")
+    await update.message.reply_text("❌ Process cancelled successfully. Ab aap koi bhi doosri command use kar sakte hain!")
     return ConversationHandler.END
 
 def main():
@@ -295,7 +296,14 @@ def main():
                 MessageHandler(filters.Regex("^(Done|done)$"), process_img_pdf),
             ],
         },
-        fallbacks=[CommandHandler("cancel", cancel), CommandHandler("start", start)],
+        fallbacks=[
+            CommandHandler("cancel", cancel),
+            CommandHandler("start", start),
+            CommandHandler("pdf_dvd", cmd_pdf_dvd),
+            CommandHandler("rmv_pg", cmd_rmv_pg),
+            CommandHandler("img_pdf", cmd_img_pdf),
+            CommandHandler("invert_pdf", cmd_invert_pdf),
+        ],
     )
 
     app.add_handler(conv_handler)
