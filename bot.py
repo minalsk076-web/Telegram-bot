@@ -16,10 +16,10 @@ user_actions = {}
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "👋 Welcome! Send a command:\n\n"
-        "1. /pdf_dvd <pages_per_pdf> (e.g. /pdf_dvd 10)\n"
-        "2. /rmv_pg <pages> (e.g. /rmv_pg 1,2,5 or 1-30)\n"
-        "3. /invert_pdf"
+        "👋 Welcome! Send a command first:\n\n"
+        "1. /pdf_dvd <pages> (e.g. /pdf_dvd 10)\n"
+        "2. /rmv_pg <pages> (e.g. /rmv_pg 1,2,5 or 1-30)\n\n"
+        "Or upload a PDF with command in the caption!"
     )
 
 async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -27,6 +27,7 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
     action = user_actions.get(user_id)
     message = update.message
     
+    # Extract action from caption if user didn't send command before
     if not action and message.caption:
         caption = message.caption.strip()
         if caption.startswith("/pdf_dvd"):
@@ -39,10 +40,10 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 action = ("remove", parts[1])
 
     if not action:
-        await message.reply_text("⚠️ Please send the command first or write it in the caption!")
+        await message.reply_text("⚠️ Command missing! First send /pdf_dvd 10 or /rmv_pg 1-5, then send your PDF file.")
         return
 
-    processing_msg = await message.reply_text("⏳ Please wait, your file is processing...")
+    processing_msg = await message.reply_text("⏳ Processing your PDF... Please wait!")
 
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action=constants.ChatAction.UPLOAD_DOCUMENT)
     
@@ -97,6 +98,7 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
             os.remove(out)
 
         gc.collect()
+        # Processing message delete karna
         await processing_msg.delete()
 
     except Exception as e:
@@ -109,9 +111,8 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("pdf_dvd", lambda u, c: (user_actions.update({u.effective_user.id: ("split", c.args[0])}), u.message.reply_text(f"✅ Ready! Send PDF to divide into {c.args[0]} pages.")) if c.args else u.message.reply_text("Usage: /pdf_dvd <pages>")))
-    app.add_handler(CommandHandler("rmv_pg", lambda u, c: (user_actions.update({u.effective_user.id: ("remove", c.args[0])}), u.message.reply_text(f"✅ Ready! Send PDF to remove pages: {c.args[0]}.")) if c.args else u.message.reply_text("Usage: /rmv_pg 1,2 or 1-30")))
-    app.add_handler(CommandHandler("invert_pdf", lambda u, c: u.message.reply_text("Invert PDF feature is ready.")))
+    app.add_handler(CommandHandler("pdf_dvd", lambda u, c: (user_actions.update({u.effective_user.id: ("split", c.args[0])}), u.message.reply_text(f"✅ Set to split every {c.args[0]} pages. Now send your PDF!")) if c.args else u.message.reply_text("Usage: /pdf_dvd <pages>")))
+    app.add_handler(CommandHandler("rmv_pg", lambda u, c: (user_actions.update({u.effective_user.id: ("remove", c.args[0])}), u.message.reply_text(f"✅ Set to remove pages {c.args[0]}. Now send your PDF!")) if c.args else u.message.reply_text("Usage: /rmv_pg 1,2 or 1-30")))
     
     app.add_handler(MessageHandler(filters.Document.PDF, handle_document))
     
