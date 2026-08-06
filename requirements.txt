@@ -1,3 +1,4 @@
-python-telegram-bot
 pymupdf
 pillow
+pyrogram
+tgcrypto
