@@ -1,5 +1,7 @@
 import os
 import asyncio
+import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
 from PIL import Image, ImageOps
 from pdf2image import convert_from_path
 import img2pdf
@@ -18,6 +20,19 @@ BOT_TOKEN = "8786795965:AAGNqLwTHBvM7su8NPS53Ah9AOjEZ3W6DFE"
 
 # Conversation States
 WAITING_PDF, WAITING_SPLIT_NUM, WAITING_RMV_NUM, WAITING_PHOTOS = range(4)
+
+# --- DUMMY SERVER FOR RENDER PORT BINDING ---
+class DummyHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"Bot is alive!")
+
+def run_dummy_server():
+    port = int(os.environ.get("PORT", 10000))
+    server = HTTPServer(('0.0.0.0', port), DummyHandler)
+    server.serve_forever()
+# ---------------------------------------------
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.clear()
@@ -170,7 +185,6 @@ async def receive_photos(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await photo_file.download_to_drive(path)
     context.user_data['photos'].append(path)
 
-    # Agar yeh photo kisi album (media_group_id) ka part hai, toh baar-baar message mat bhejo
     if update.message.media_group_id:
         return WAITING_PHOTOS
 
@@ -241,7 +255,6 @@ async def process_invert_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE)
     inverted_paths = []
 
     try:
-        # PDF pages ko images me convert karke invert karenge
         images = convert_from_path(input_path)
         for i, img in enumerate(images):
             inv_img = ImageOps.invert(img.convert("RGB"))
@@ -281,6 +294,10 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ConversationHandler.END
 
 def main():
+    # Start dummy HTTP server in background thread for Render port binding
+    server_thread = threading.Thread(target=run_dummy_server, daemon=True)
+    server_thread.start()
+
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
     conv_handler = ConversationHandler(
