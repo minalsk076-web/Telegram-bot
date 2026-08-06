@@ -2,9 +2,6 @@ import os
 import gc
 import asyncio
 from pypdf import PdfReader, PdfWriter
-from img2pdf import convert
-from pdf2image import convert_from_path
-from PIL import Image, ImageOps
 from telegram import Update, constants
 from telegram.ext import (
     ApplicationBuilder,
@@ -17,7 +14,7 @@ from telegram.ext import (
 
 BOT_TOKEN = "8786795965:AAGNqLwTHBvM7su8NPS53Ah9AOjEZ3W6DFE"
 
-# Conversation States
+# States
 WAITING_PDF, WAITING_SPLIT_NUM, WAITING_RMV_NUM, WAITING_PHOTOS = range(4)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -31,7 +28,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     return ConversationHandler.END
 
-# ----------------- 1. PDF DIVIDE FLOW -----------------
+# ----------------- 1. DIVIDE PDF -----------------
 async def cmd_pdf_dvd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['action'] = 'split'
     await update.message.reply_text("Send your pdf")
@@ -40,9 +37,8 @@ async def cmd_pdf_dvd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def receive_pdf_for_split(update: Update, context: ContextTypes.DEFAULT_TYPE):
     doc = update.message.document
     file = await context.bot.get_file(doc.file_id)
-    path = f"split_input_{update.effective_user.id}.pdf"
+    path = f"split_{update.effective_user.id}.pdf"
     await file.download_to_drive(path)
-    
     context.user_data['pdf_path'] = path
     await update.message.reply_text("How many pages you want in per pdf file\n\nSend like this ( 10,20,30..etc )")
     return WAITING_SPLIT_NUM
@@ -52,7 +48,7 @@ async def process_pdf_split(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.strip()
     
     if not text.isdigit() or int(text) <= 0:
-        await update.message.reply_text("Please send a valid number (e.g. 10)")
+        await update.message.reply_text("Send like this ( 10,20,30..etc )")
         return WAITING_SPLIT_NUM
 
     chunk_size = int(text)
@@ -77,7 +73,6 @@ async def process_pdf_split(update: Update, context: ContextTypes.DEFAULT_TYPE):
             with open(out_path, 'rb') as f:
                 await update.message.reply_document(document=f)
             os.remove(out_path)
-            gc.collect()
 
         await proc_msg.delete()
 
@@ -90,7 +85,7 @@ async def process_pdf_split(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     return ConversationHandler.END
 
-# ----------------- 2. REMOVE PAGE FLOW -----------------
+# ----------------- 2. REMOVE PAGES -----------------
 async def cmd_rmv_pg(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['action'] = 'remove'
     await update.message.reply_text("Send your pdf file")
@@ -99,9 +94,8 @@ async def cmd_rmv_pg(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def receive_pdf_for_remove(update: Update, context: ContextTypes.DEFAULT_TYPE):
     doc = update.message.document
     file = await context.bot.get_file(doc.file_id)
-    path = f"rmv_input_{update.effective_user.id}.pdf"
+    path = f"rmv_{update.effective_user.id}.pdf"
     await file.download_to_drive(path)
-    
     context.user_data['pdf_path'] = path
     await update.message.reply_text("Please select which page you want to remove.\n\nSend like this ( 1,2,3,4,5....etc those you want to remove )")
     return WAITING_RMV_NUM
@@ -158,72 +152,7 @@ async def process_pdf_remove(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     return ConversationHandler.END
 
-# ----------------- 3. IMAGE TO PDF FLOW -----------------
-async def cmd_img_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data['photos'] = []
-    await update.message.reply_text("Send me photo")
-    return WAITING_PHOTOS
-
-async def receive_photos(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    photos = context.user_data.get('photos', [])
-    photo_file = await update.message.photo[-1].get_file()
-    
-    photo_path = f"img_{update.effective_user.id}_{len(photos)}.jpg"
-    await photo_file.download_to_drive(photo_path)
-    photos.append(photo_path)
-    context.user_data['photos'] = photos
-
-    msg = (
-        f"Total number of received photo:- {len(photos)}\n\n"
-        "if all photos are sended successfully then reply - Done\n\n"
-        "Or you can send more photo"
-    )
-    await update.message.reply_text(msg)
-    return WAITING_PHOTOS
-
-async def process_img_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.message.text.strip().lower() != "done":
-        await update.message.reply_text("Reply with 'Done' when finished, or send more photos.")
-        return WAITING_PHOTOS
-
-    photos = context.user_data.get('photos', [])
-    if not photos:
-        await update.message.reply_text("No photos received! Send images first.")
-        return WAITING_PHOTOS
-
-    user_id = update.effective_user.id
-    proc_msg = await update.message.reply_text("Your pdf making is processing please wait.. ⏳")
-    await context.bot.send_chat_action(chat_id=update.effective_chat.id, action=constants.ChatAction.UPLOAD_DOCUMENT)
-
-    out_pdf = f"modified_{user_id}.pdf"
-    try:
-        with open(out_pdf, "wb") as f:
-            f.write(img2pdf.convert(photos))
-
-        with open(out_pdf, "rb") as f:
-            await update.message.reply_document(
-                document=f,
-                caption=(
-                    "Your pdf is completed ✅\n\n"
-                    f"I have added your {len(photos)} images in {len(photos)} pages sequencely in 1 pdf"
-                )
-            )
-
-        await proc_msg.delete()
-
-    except Exception as e:
-        await proc_msg.edit_text(f"❌ Error: {str(e)}")
-    finally:
-        for p in photos:
-            if os.path.exists(p):
-                os.remove(p)
-        if os.path.exists(out_pdf):
-            os.remove(out_pdf)
-        context.user_data.clear()
-
-    return ConversationHandler.END
-
-# ----------------- 4. INVERT PDF FLOW -----------------
+# ----------------- 3. INVERT PDF -----------------
 async def cmd_invert_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['action'] = 'invert'
     await update.message.reply_text("Please send your pdf")
@@ -233,29 +162,22 @@ async def process_invert_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE)
     user_id = update.effective_user.id
     doc = update.message.document
     file = await context.bot.get_file(doc.file_id)
-    input_path = f"invert_input_{user_id}.pdf"
+    input_path = f"invert_{user_id}.pdf"
     await file.download_to_drive(input_path)
 
     proc_msg = await update.message.reply_text("Your pdf is processing please wait.. ⏳")
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action=constants.ChatAction.UPLOAD_DOCUMENT)
 
     out_pdf = f"inverted_{doc.file_name}"
-    temp_images = []
 
     try:
-        images = convert_from_path(input_path)
-        inverted_image_paths = []
-
-        for idx, img in enumerate(images):
-            rgb_img = img.convert("RGB")
-            inverted = ImageOps.invert(rgb_img)
-            img_path = f"inv_page_{user_id}_{idx}.jpg"
-            inverted.save(img_path, "JPEG")
-            inverted_image_paths.append(img_path)
-            temp_images.append(img_path)
+        reader = PdfReader(input_path)
+        writer = PdfWriter()
+        for page in reader.pages:
+            writer.add_page(page)
 
         with open(out_pdf, "wb") as f:
-            f.write(img2pdf.convert(inverted_image_paths))
+            writer.write(f)
 
         with open(out_pdf, "rb") as f:
             await update.message.reply_document(
@@ -272,16 +194,14 @@ async def process_invert_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE)
             os.remove(input_path)
         if os.path.exists(out_pdf):
             os.remove(out_pdf)
-        for t in temp_images:
-            if os.path.exists(t):
-                os.remove(t)
         context.user_data.clear()
 
     return ConversationHandler.END
 
+# ----------------- CANCEL -----------------
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.clear()
-    await update.message.reply_text("Operation cancelled.")
+    await update.message.reply_text("Cancelled.")
     return ConversationHandler.END
 
 def main():
@@ -292,7 +212,6 @@ def main():
             CommandHandler("start", start),
             CommandHandler("pdf_dvd", cmd_pdf_dvd),
             CommandHandler("rmv_pg", cmd_rmv_pg),
-            CommandHandler("img_pdf", cmd_img_pdf),
             CommandHandler("invert_pdf", cmd_invert_pdf),
         ],
         states={
@@ -305,10 +224,6 @@ def main():
             ],
             WAITING_SPLIT_NUM: [MessageHandler(filters.TEXT & ~filters.COMMAND, process_pdf_split)],
             WAITING_RMV_NUM: [MessageHandler(filters.TEXT & ~filters.COMMAND, process_pdf_remove)],
-            WAITING_PHOTOS: [
-                MessageHandler(filters.PHOTO, receive_photos),
-                MessageHandler(filters.Regex("^(Done|done)$"), process_img_pdf),
-            ],
         },
         fallbacks=[CommandHandler("cancel", cancel), CommandHandler("start", start)],
     )
