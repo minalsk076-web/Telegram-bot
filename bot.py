@@ -1,7 +1,6 @@
 import os
 import gc
 from pypdf import PdfReader, PdfWriter
-from PIL import Image
 from telegram import Update, constants
 from telegram.ext import (
     ApplicationBuilder,
@@ -17,10 +16,9 @@ user_actions = {}
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "👋 Welcome! Send a command:\n\n"
-        "1. /img_pdf (Then send images)\n"
-        "2. /pdf_dvd <pages_per_pdf> (e.g. /pdf_dvd 10)\n"
-        "3. /rmv_pg <pages> (e.g. /rmv_pg 1,2,5 or 1-30)\n"
-        "4. /invert_pdf"
+        "1. /pdf_dvd <pages_per_pdf> (e.g. /pdf_dvd 10)\n"
+        "2. /rmv_pg <pages> (e.g. /rmv_pg 1,2,5 or 1-30)\n"
+        "3. /invert_pdf"
     )
 
 async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -59,7 +57,6 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 gc.collect()
 
         elif act_type == "remove":
-            # Parse custom ranges like '1-30' and specific pages like '1,2,5'
             pages_to_del = set()
             parts = act_value.split(',')
             for part in parts:
@@ -92,43 +89,14 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
             os.remove(input_path)
         user_actions.pop(user_id, None)
 
-async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    action = user_actions.get(user_id)
-    if action != ("img", ""):
-        await update.message.reply_text("⚠️ Please send the /img_pdf command first!")
-        return
-
-    photo_file = await update.message.photo[-1].get_file()
-    photo_path = f"photo_{user_id}.jpg"
-    await photo_file.download_to_drive(photo_path)
-
-    try:
-        image = Image.open(photo_path)
-        rgb_image = image.convert('RGB')
-        out_pdf = f"converted_{user_id}.pdf"
-        rgb_image.save(out_pdf)
-
-        with open(out_pdf, 'rb') as f:
-            await update.message.reply_document(document=f)
-        
-        os.remove(photo_path)
-        os.remove(out_pdf)
-    except Exception as e:
-        await update.message.reply_text(f"❌ Error: {str(e)}")
-    finally:
-        user_actions.pop(user_id, None)
-
 def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("img_pdf", lambda u, c: (user_actions.update({u.effective_user.id: ("img", "")}), u.message.reply_text("Send your images now!"))))
     app.add_handler(CommandHandler("pdf_dvd", lambda u, c: (user_actions.update({u.effective_user.id: ("split", c.args[0])}), u.message.reply_text(f"Send PDF to divide into {c.args[0]} pages each!")) if c.args else u.message.reply_text("Usage: /pdf_dvd <pages>")))
     app.add_handler(CommandHandler("rmv_pg", lambda u, c: (user_actions.update({u.effective_user.id: ("remove", c.args[0])}), u.message.reply_text(f"Send PDF to remove pages: {c.args[0]}!")) if c.args else u.message.reply_text("Usage: /rmv_pg 1,2 or 1-30")))
     app.add_handler(CommandHandler("invert_pdf", lambda u, c: u.message.reply_text("Invert PDF feature is ready.")))
     
     app.add_handler(MessageHandler(filters.Document.PDF, handle_document))
-    app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     app.run_polling()
 
 if __name__ == "__main__":
