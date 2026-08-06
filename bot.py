@@ -1,8 +1,8 @@
 import os
+import asyncio
 import fitz  # PyMuPDF
 from pyrogram import Client, filters
 
-# Environment Variables (API_ID aur API_HASH Render dashboard se lenge, Bot Token yahan fixed hai)
 API_ID = int(os.environ.get("API_ID", "123456"))
 API_HASH = os.environ.get("API_HASH", "your_api_hash")
 BOT_TOKEN = "8786795965:AAGNqLwTHBvM7su8NPS53Ah9AOjEZ3W6DFE"
@@ -29,12 +29,10 @@ async def handle_document(client, message):
 
     status_msg = await message.reply_text("⏳ Processing your PDF (Up to 2 GB supported)... Please wait...")
     
-    # Download file (Pyrogram handles up to 2 GB)
     input_path = await message.download()
     output_path = f"processed_{message.document.file_name}"
 
     try:
-        # PDF Invert Logic using PyMuPDF
         doc = fitz.open(input_path)
         for page in doc:
             pix = page.get_pixmap()
@@ -42,19 +40,22 @@ async def handle_document(client, message):
         doc.save(output_path)
         doc.close()
 
-        # Send processed file back
         await message.reply_document(output_path, caption="✅ Here is your inverted PDF!")
 
     except Exception as e:
         await message.reply_text(f"❌ Error during processing: {str(e)}")
 
     finally:
-        # Cleanup local files
         if os.path.exists(input_path):
             os.remove(input_path)
         if os.path.exists(output_path):
             os.remove(output_path)
         await status_msg.delete()
 
+async def main():
+    await app.start()
+    print("Bot started successfully!")
+    await asyncio.gather(*(asyncio.Event().wait(),))
+
 if __name__ == "__main__":
-    app.run()
+    asyncio.run(main())
