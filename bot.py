@@ -1,5 +1,4 @@
 import os
-import gc
 import asyncio
 import img2pdf
 from pypdf import PdfReader, PdfWriter
@@ -153,21 +152,25 @@ async def process_pdf_remove(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     return ConversationHandler.END
 
-# ----------------- 3. IMAGE TO PDF (Bina Pillow Ke) -----------------
+# ----------------- 3. IMAGE TO PDF (Album Supported) -----------------
 async def cmd_img_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['photos'] = []
     await update.message.reply_text("Send me photo")
     return WAITING_PHOTOS
 
 async def receive_photos(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    photos = context.user_data.get('photos', [])
+    if 'photos' not in context.user_data:
+        context.user_data['photos'] = []
+        
     photo_file = await update.message.photo[-1].get_file()
-    
-    photo_path = f"img_{update.effective_user.id}_{len(photos)}.jpg"
-    await photo_file.download_to_drive(photo_path)
-    photos.append(photo_path)
-    context.user_data['photos'] = photos
+    path = f"img_{update.effective_user.id}_{update.message.message_id}.jpg"
+    await photo_file.download_to_drive(path)
+    context.user_data['photos'].append(path)
 
+    # Thoda wait taaki album ki saari photos ek saath group ho jayein aur baar-baar spam na ho
+    await asyncio.sleep(1.5)
+    
+    photos = context.user_data['photos']
     msg = (
         f"Total number of received photo:- {len(photos)}\n\n"
         "if all photos are sended successfully then reply - Done\n\n"
@@ -188,7 +191,6 @@ async def process_img_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     out_pdf = f"modified_{user_id}.pdf"
     try:
-        # High speed conversion via img2pdf
         with open(out_pdf, "wb") as f:
             f.write(img2pdf.convert(photos))
 
@@ -236,7 +238,6 @@ async def process_invert_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE)
     try:
         reader = PdfReader(input_path)
         writer = PdfWriter()
-
         for page in reader.pages:
             writer.add_page(page)
 
