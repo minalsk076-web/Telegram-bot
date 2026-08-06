@@ -2,8 +2,8 @@ import os
 import asyncio
 import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
+import fitz  # PyMuPDF
 from PIL import Image, ImageOps
-from pdf2image import convert_from_path
 import img2pdf
 from pypdf import PdfReader, PdfWriter
 from telegram import Update, constants
@@ -235,7 +235,7 @@ async def process_img_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     return ConversationHandler.END
 
-# ----------------- 4. INVERT PDF (Color Inversion Fixed) -----------------
+# ----------------- 4. INVERT PDF (PyMuPDF Color Inversion) -----------------
 async def cmd_invert_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['action'] = 'invert'
     await update.message.reply_text("Please send your pdf (Ya cancel karne ke liye /cancel bhejein)")
@@ -255,12 +255,22 @@ async def process_invert_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE)
     inverted_paths = []
 
     try:
-        images = convert_from_path(input_path)
-        for i, img in enumerate(images):
-            inv_img = ImageOps.invert(img.convert("RGB"))
-            p = f"inv_{user_id}_{i}.jpg"
-            inv_img.save(p, "JPEG")
-            inverted_paths.append(p)
+        # PyMuPDF se PDF render karke invert karenge
+        pdf_document = fitz.open(input_path)
+        for i, page in enumerate(pdf_document):
+            pix = page.get_pixmap(dpi=150)
+            img_path = f"page_{user_id}_{i}.png"
+            pix.save(img_path)
+
+            # Pillow se colors invert karo
+            img = Image.open(img_path).convert("RGB")
+            inv_img = ImageOps.invert(img)
+            inv_path = f"inv_{user_id}_{i}.jpg"
+            inv_img.save(inv_path, "JPEG")
+            inverted_paths.append(inv_path)
+            
+            if os.path.exists(img_path):
+                os.remove(img_path)
 
         with open(out_pdf, "wb") as f:
             f.write(img2pdf.convert(inverted_paths))
@@ -294,7 +304,6 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ConversationHandler.END
 
 def main():
-    # Start dummy HTTP server in background thread for Render port binding
     server_thread = threading.Thread(target=run_dummy_server, daemon=True)
     server_thread.start()
 
