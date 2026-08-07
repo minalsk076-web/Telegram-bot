@@ -255,14 +255,12 @@ async def process_invert_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE)
     inverted_paths = []
 
     try:
-        # PyMuPDF se PDF render karke invert karenge
         pdf_document = fitz.open(input_path)
         for i, page in enumerate(pdf_document):
             pix = page.get_pixmap(dpi=150)
             img_path = f"page_{user_id}_{i}.png"
             pix.save(img_path)
 
-            # Pillow se colors invert karo
             img = Image.open(img_path).convert("RGB")
             inv_img = ImageOps.invert(img)
             inv_path = f"inv_{user_id}_{i}.jpg"
