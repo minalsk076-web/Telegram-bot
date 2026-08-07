@@ -333,7 +333,17 @@ def main():
     )
 
     app.add_handler(conv_handler)
-    app.run_polling(allowed_updates=Update.ALL_TYPES)
+        import time
+
+    while True:
+      try:
+        print("Bot starting...")
+        app.run_polling(allowed_updates=Update.ALL_TYPES)
+      except Exception as e:
+        print(f"Error aa gaya tha: {e}")
+        print("5 second mein restart ho raha hai...")
+        time.sleep(5)
+
 
 if __name__ == "__main__":
     main()
