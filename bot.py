@@ -37,19 +37,19 @@ def run_dummy_server():
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.clear()
     await update.message.reply_text(
-        "👋 Welcome!\n\nHere is all command\n\n"
-        "1. /pdf_dvd\n"
-        "2. /rmv_pg\n"
-        "3. /img_pdf\n"
-        "4. /invert_pdf\n\n"
-        "*(Kisi bhi process ko beech mein rokne ke liye /cancel bhejein)*"
+        "👋 Welcome!\n\nHere are all available commands:\n\n"
+        "1. /pdf_dvd - Split a PDF into smaller files\n"
+        "2. /rmv_pg - Remove specific pages from a PDF\n"
+        "3. /img_pdf - Convert images into a single PDF\n"
+        "4. /invert_pdf - Invert colors of a PDF\n\n"
+        "*(Type /cancel anytime to abort the current process)*"
     )
     return ConversationHandler.END
 
 # ----------------- 1. DIVIDE PDF -----------------
 async def cmd_pdf_dvd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['action'] = 'split'
-    await update.message.reply_text("Send your pdf (Ya cancel karne ke liye /cancel bhejein)")
+    await update.message.reply_text("Please send your PDF file (Or type /cancel to stop)")
     return WAITING_PDF
 
 async def receive_pdf_for_split(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -58,7 +58,7 @@ async def receive_pdf_for_split(update: Update, context: ContextTypes.DEFAULT_TY
     path = f"split_{update.effective_user.id}.pdf"
     await file.download_to_drive(path)
     context.user_data['pdf_path'] = path
-    await update.message.reply_text("How many pages you want in per pdf file\n\nSend like this ( 10,20,30..etc )")
+    await update.message.reply_text("How many pages do you want in each PDF file?\n\nSend like this (e.g., 10, 20, 30)")
     return WAITING_SPLIT_NUM
 
 async def process_pdf_split(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -66,13 +66,13 @@ async def process_pdf_split(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.strip()
     
     if not text.isdigit() or int(text) <= 0:
-        await update.message.reply_text("Send like this ( 10,20,30..etc )")
+        await update.message.reply_text("Please send a valid number (e.g., 10, 20, 30)")
         return WAITING_SPLIT_NUM
 
     chunk_size = int(text)
     input_path = context.user_data.get('pdf_path')
 
-    proc_msg = await update.message.reply_text("Your pdf is processing please wait.. ⏳")
+    proc_msg = await update.message.reply_text("Your PDF is processing, please wait... ⏳")
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action=constants.ChatAction.UPLOAD_DOCUMENT)
 
     try:
@@ -106,7 +106,7 @@ async def process_pdf_split(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ----------------- 2. REMOVE PAGES -----------------
 async def cmd_rmv_pg(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['action'] = 'remove'
-    await update.message.reply_text("Send your pdf file (Ya cancel karne ke liye /cancel bhejein)")
+    await update.message.reply_text("Please send your PDF file (Or type /cancel to stop)")
     return WAITING_PDF
 
 async def receive_pdf_for_remove(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -115,7 +115,7 @@ async def receive_pdf_for_remove(update: Update, context: ContextTypes.DEFAULT_T
     path = f"rmv_{update.effective_user.id}.pdf"
     await file.download_to_drive(path)
     context.user_data['pdf_path'] = path
-    await update.message.reply_text("Please select which page you want to remove.\n\nSend like this ( 1,2,3,4,5....etc those you want to remove )")
+    await update.message.reply_text("Please specify which pages you want to remove.\n\nSend like this (e.g., 1,2,3 or 4-8)")
     return WAITING_RMV_NUM
 
 async def process_pdf_remove(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -123,7 +123,7 @@ async def process_pdf_remove(update: Update, context: ContextTypes.DEFAULT_TYPE)
     raw_input = update.message.text.strip()
     input_path = context.user_data.get('pdf_path')
 
-    proc_msg = await update.message.reply_text("Your pdf is processing please wait.. ⏳")
+    proc_msg = await update.message.reply_text("Your PDF is processing, please wait... ⏳")
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action=constants.ChatAction.UPLOAD_DOCUMENT)
 
     try:
@@ -155,7 +155,7 @@ async def process_pdf_remove(update: Update, context: ContextTypes.DEFAULT_TYPE)
         with open(out_path, 'rb') as f:
             await update.message.reply_document(
                 document=f,
-                caption=f"Your pages are removed successfully ( p.no:- {raw_input} )"
+                caption=f"Pages removed successfully! (Removed pages: {raw_input})"
             )
 
         os.remove(out_path)
@@ -170,10 +170,10 @@ async def process_pdf_remove(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     return ConversationHandler.END
 
-# ----------------- 3. IMAGE TO PDF (Album Spam Fixed) -----------------
+# ----------------- 3. IMAGE TO PDF (Instant Count Added) -----------------
 async def cmd_img_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['photos'] = []
-    await update.message.reply_text("Send me photo (Ya cancel karne ke liye /cancel bhejein)")
+    await update.message.reply_text("Please send your photos one by one or as an album. Type 'Done' when you finish sending.")
     return WAITING_PHOTOS
 
 async def receive_photos(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -185,26 +185,18 @@ async def receive_photos(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await photo_file.download_to_drive(path)
     context.user_data['photos'].append(path)
 
-    if update.message.media_group_id:
-        return WAITING_PHOTOS
-
-    photos = context.user_data['photos']
-    msg = (
-        f"Total number of received photo:- {len(photos)}\n\n"
-        "if all photos are sended successfully then reply - Done\n\n"
-        "Or you can send more photo"
-    )
-    await update.message.reply_text(msg)
+    total_photos = len(context.user_data['photos'])
+    await update.message.reply_text(f"📸 Total photos received: {total_photos}\n\nSend more photos or type **Done** to generate the PDF.")
     return WAITING_PHOTOS
 
 async def process_img_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE):
     photos = context.user_data.get('photos', [])
     if not photos:
-        await update.message.reply_text("No photos received! Send images first.")
+        await update.message.reply_text("No photos received! Please send images first.")
         return WAITING_PHOTOS
 
     user_id = update.effective_user.id
-    proc_msg = await update.message.reply_text("Your pdf making is processing please wait.. ⏳")
+    proc_msg = await update.message.reply_text("Creating your PDF, please wait... ⏳")
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action=constants.ChatAction.UPLOAD_DOCUMENT)
 
     out_pdf = f"modified_{user_id}.pdf"
@@ -216,8 +208,8 @@ async def process_img_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_document(
                 document=f,
                 caption=(
-                    "Your pdf is completed ✅\n\n"
-                    f"I have added your {len(photos)} images in {len(photos)} pages sequencely in 1 pdf"
+                    "PDF generated successfully! ✅\n\n"
+                    f"Added {len(photos)} images sequentially into 1 PDF."
                 )
             )
 
@@ -235,10 +227,10 @@ async def process_img_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     return ConversationHandler.END
 
-# ----------------- 4. INVERT PDF (PyMuPDF Color Inversion) -----------------
+# ----------------- 4. INVERT PDF -----------------
 async def cmd_invert_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['action'] = 'invert'
-    await update.message.reply_text("Please send your pdf (Ya cancel karne ke liye /cancel bhejein)")
+    await update.message.reply_text("Please send your PDF file to invert colors (Or type /cancel to stop)")
     return WAITING_PDF
 
 async def process_invert_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -248,7 +240,7 @@ async def process_invert_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE)
     input_path = f"invert_{user_id}.pdf"
     await file.download_to_drive(input_path)
 
-    proc_msg = await update.message.reply_text("PDF colors are inverting, please wait.. ⏳")
+    proc_msg = await update.message.reply_text("Inverting PDF colors, this may take a moment... ⏳")
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action=constants.ChatAction.UPLOAD_DOCUMENT)
 
     out_pdf = f"inverted_{doc.file_name}"
@@ -276,7 +268,7 @@ async def process_invert_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE)
         with open(out_pdf, "rb") as f:
             await update.message.reply_document(
                 document=f,
-                caption="Your pdf colors are successfully inverted! ✅"
+                caption="PDF colors inverted successfully! ✅"
             )
 
         await proc_msg.delete()
@@ -298,7 +290,7 @@ async def process_invert_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE)
 # ----------------- CANCEL COMMAND -----------------
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.clear()
-    await update.message.reply_text("❌ Process cancelled successfully. Ab aap doosri command use kar sakte hain!")
+    await update.message.reply_text("❌ Process cancelled successfully. You can now use other commands!")
     return ConversationHandler.END
 
 def main():
@@ -327,7 +319,7 @@ def main():
             WAITING_RMV_NUM: [MessageHandler(filters.TEXT & ~filters.COMMAND, process_pdf_remove)],
             WAITING_PHOTOS: [
                 MessageHandler(filters.PHOTO, receive_photos),
-                MessageHandler(filters.Regex("^(Done|done)$"), process_img_pdf),
+                MessageHandler(filters.Regex("^(Done|done|DONE)$"), process_img_pdf),
             ],
         },
         fallbacks=[
