@@ -1,3 +1,4 @@
+import time
 import os
 import asyncio
 import threading
@@ -333,8 +334,6 @@ def main():
     )
 
     app.add_handler(conv_handler)
-        import time
-
     while True:
       try:
         print("Bot starting...")
